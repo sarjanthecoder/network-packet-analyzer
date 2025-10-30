@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Traffic Analyzer</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* ============================================
+           GLOBAL STYLES & RESET
+        ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --dark-color: #1f2937;
+            --light-bg: #f9fafb;
+            --border-color: #e5e7eb;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ============================================
+           NAVIGATION BAR
+        ============================================ */
+        nav {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        nav.scrolled {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 30px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--dark-color);
+            font-weight: 500;
+            transition: color 0.3s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--primary-color);
+            transition: width 0.3s;
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        .menu-toggle {
+            display: none;
+            flex-direction: column;
+            cursor: pointer;
+            gap: 5px;
+        }
+
+        .menu-toggle span {
+            width: 25px;
+            height: 3px;
+            background: var(--dark-color);
+            transition: all 0.3s;
+        }
+
+        /* ============================================
+           LANDING PAGE SECTION
+        ============================================ */
+        #landing {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 100px 20px 50px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-content {
+            max-width: 800px;
+            color: white;
+            z-index: 2;
+            animation: fadeInUp 1s ease;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero-content h1 {
+            font-size: 56px;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .hero-content p {
+            font-size: 20px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+
+        .cta-button {
+            padding: 15px 40px;
+            font-size: 18px;
+            background: white;
+            color: var(--primary-color);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin-top: 60px;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .feature-card h3 {
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+
+        /* ============================================
+           ANALYZER SECTION
+        ============================================ */
+        #analyzer {
+            display: none;
+            min-height: 100vh;
+            padding: 80px 20px 20px;
+        }
+
+        #analyzer.active {
+            display: block;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header.analyzer-header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        header.analyzer-header h2 {
+            color: #333;
+            font-size: 24px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            background: #fee2e2;
+            color: #991b1b;
+            transition: all 0.3s ease;
+        }
+
+        .status.active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        /* DASHBOARD */
+        .dashboard {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            height: 400px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card h3 {
+            color: #555;
+            font-size: 16px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            flex-shrink: 0;
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .chart-card {
+            position: relative;
+            height: 100%;
+        }
+
+        .chart-card canvas {
+            max-height: 320px !important;
+        }
+
+        /* TABLE */
+        .table-card {
+            overflow: hidden;
+            height: 500px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            overflow-y: auto;
+            max-height: 420px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            background: #f9fafb;
+            z-index: 10;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        th {
+            font-weight: 600;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        td {
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        tbody tr {
+            transition: background 0.2s ease;
+        }
+
+        tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #9ca3af;
+            padding: 40px !important;
+        }
+
+        .protocol-tcp { color: #3b82f6; font-weight: 600; }
+        .protocol-udp { color: #8b5cf6; font-weight: 600; }
+        .protocol-icmp { color: #ec4899; font-weight: 600; }
+        .protocol-other { color: #6b7280; font-weight: 600; }
+
+        /* ============================================
+           FOOTER
+        ============================================ */
+        footer {
+            background: rgba(31, 41, 55, 0.95);
+            color: white;
+            padding: 40px 20px 20px;
+            margin-top: 50px;
+        }
+
+        .footer-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-bottom: 30px;
+        }
+
+        .footer-section h3 {
+            margin-bottom: 15px;
+            color: var(--primary-color);
+        }
+
+        .footer-section ul {
+            list-style: none;
+        }
+
+        .footer-section ul li {
+            margin-bottom: 10px;
+        }
+
+        .footer-section a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-section a:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .social-links {
+            display: flex;
+            gap: 15px;
+        }
+
+        .social-links a {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .social-links a:hover {
+            background: var(--primary-color);
+            transform: translateY(-3px);
+        }
+
+        /* ============================================
+           RESPONSIVE DESIGN
+        ============================================ */
+        @media (max-width: 768px) {
+            .nav-links {
+                position: fixed;
+                left: -100%;
+                top: 70px;
+                flex-direction: column;
+                background: white;
+                width: 100%;
+                text-align: center;
+                transition: 0.3s;
+                box-shadow: 0 10px 27px rgba(0, 0, 0, 0.1);
+                padding: 20px 0;
+            }
+
+            .nav-links.active {
+                left: 0;
+            }
+
+            .menu-toggle {
+                display: flex;
+            }
+
+            .hero-content h1 {
+                font-size: 36px;
+            }
+
+            .hero-content p {
+                font-size: 16px;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+
+            .chart-card {
+                height: 350px;
+            }
+        }
+
+        /* ============================================
+           ANIMATIONS
+        ============================================ */
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .loading {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============================================
+     NAVIGATION BAR
+============================================ -->
+<nav id="navbar">
+    <div class="nav-container">
+        <div class="logo">
+            🌐 NetAnalyzer
+        </div>
+        <ul class="nav-links" id="navLinks">
+            <li><a onclick="showSection('landing')">Home</a></li>
+            <li><a onclick="showSection('analyzer')">Analyzer</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#contact">Contact</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
+</nav>
+
+<!-- ============================================
+     LANDING PAGE
+============================================ -->
+<section id="landing">
+    <div class="hero-content">
+        <h1>Network Traffic Analyzer</h1>
+        <p>Real-time packet capture and analysis. Monitor your network traffic with powerful visualization tools.</p>
+        <button class="cta-button" onclick="showSection('analyzer')">
+            🚀 Start Analyzing
+        </button>
+
+        <div class="features-grid" id="features">
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Real-Time Analysis</h3>
+                <p>Monitor packets as they flow through your network</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔍</div>
+                <h3>Deep Inspection</h3>
+                <p>Analyze TCP, UDP, ICMP protocols in detail</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📈</div>
+                <h3>Visual Reports</h3>
+                <p>Interactive charts and statistics</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================
+     ANALYZER SECTION
+============================================ -->
+<section id="analyzer">
+    <div class="container">
+        <header class="analyzer-header">
+            <h2>🔬 Traffic Monitor</h2>
+            <div class="controls">
+                <button id="startBtn" class="btn btn-success">▶ Start Capture</button>
+                <button id="stopBtn" class="btn btn-danger" disabled>⏹ Stop Capture</button>
+                <button id="clearBtn" class="btn btn-warning">🗑 Clear Data</button>
+                <span id="status" class="status">Stopped</span>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <!-- Statistics Cards -->
+            <div class="stats-grid">
+                <div class="card">
+                    <h3>Total Packets</h3>
+                    <div class="stat-value" id="totalPackets">0</div>
+                </div>
+                <div class="card">
+                    <h3>TCP Packets</h3>
+                    <div class="stat-value" id="tcpPackets" style="color: #3b82f6;">0</div>
+                </div>
+                <div class="card">
+                    <h3>UDP Packets</h3>
+                    <div class="stat-value" id="udpPackets" style="color: #8b5cf6;">0</div>
+                </div>
+                <div class="card">
+                    <h3>ICMP Packets</h3>
+                    <div class="stat-value" id="icmpPackets" style="color: #ec4899;">0</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <div class="card chart-card">
+                    <h3>Protocol Distribution</h3>
+                    <canvas id="protocolChart"></canvas>
+                </div>
+                <div class="card chart-card">
+                    <h3>Top Source IPs</h3>
+                    <canvas id="ipChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Packet Table -->
+            <div class="card table-card">
+                <h3>Recent Packets</h3>
+                <div class="table-container">
+                    <table id="packetTable">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Source IP</th>
+                                <th>Src Port</th>
+                                <th>Destination IP</th>
+                                <th>Dst Port</th>
+                                <th>Protocol</th>
+                                <th>Size</th>
+                            </tr>
+                        </thead>
+                        <tbody id="packetBody">
+                            <tr>
+                                <td colspan="7" class="no-data">No packets captured yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================
+     FOOTER
+============================================ -->
+<footer id="about">
+    <div class="footer-container">
+        <div class="footer-grid">
+            <div class="footer-section">
+                <h3>About NetAnalyzer</h3>
+                <p>A powerful network traffic analysis tool built with Flask and modern web technologies. Monitor and analyze your network in real-time.</p>
+            </div>
+            <div class="footer-section">
+                <h3>Quick Links</h3>
+                <ul>
+                    <li><a href="#" onclick="showSection('landing')">Home</a></li>
+                    <li><a href="#" onclick="showSection('analyzer')">Analyzer</a></li>
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#">Documentation</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>Resources</h3>
+                <ul>
+                    <li><a href="#">API Documentation</a></li>
+                    <li><a href="#">User Guide</a></li>
+                    <li><a href="#">FAQ</a></li>
+                    <li><a href="#">Support</a></li>
+                </ul>
+            </div>
+            <div class="footer-section" id="contact">
+                <h3>Connect With Us</h3>
+                <div class="social-links">
+                    <a href="#" title="GitHub">📘</a>
+                    <a href="#" title="Twitter">🐦</a>
+                    <a href="#" title="LinkedIn">💼</a>
+                    <a href="#" title="Email">📧</a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 NetAnalyzer. All rights reserved. Built with ❤️ using Flask & JavaScript</p>
+        </div>
+    </div>
+</footer>
+
+<!-- ============================================
+     JAVASCRIPT
+============================================ -->
+<script>
+    // ==========================================
+    // Navigation & Section Management
+    // ==========================================
+    function toggleMenu() {
+        const navLinks = document.getElementById('navLinks');
+        navLinks.classList.toggle('active');
+    }
+
+    function showSection(section) {
+        const landing = document.getElementById('landing');
+        const analyzer = document.getElementById('analyzer');
+        const navLinks = document.getElementById('navLinks');
+        
+        // Close mobile menu
+        navLinks.classList.remove('active');
+        
+        if (section === 'landing') {
+            landing.style.display = 'flex';
+            analyzer.classList.remove('active');
+        } else if (section === 'analyzer') {
+            landing.style.display = 'none';
+            analyzer.classList.add('active');
+            // Initialize charts if not already initialized
+            if (!chartsInitialized) {
+                initCharts();
+                chartsInitialized = true;
+            }
+        }
+    }
+
+    // Navbar scroll effect
+    window.addEventListener('scroll', () => {
+        const navbar = document.getElementById('navbar');
+        if (window.scrollY > 50) {
+            navbar.classList.add('scrolled');
+        } else {
+            navbar.classList.remove('scrolled');
+        }
+    });
+
+    // ==========================================
+    // Socket.IO Connection
+    // ==========================================
+    const socket = io();
+
+    // ==========================================
+    // Chart Instances
+    // ==========================================
+    let protocolChart = null;
+    let ipChart = null;
+    let chartsInitialized = false;
+
+    // ==========================================
+    // DOM Elements
+    // ==========================================
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const status = document.getElementById('status');
+    const packetBody = document.getElementById('packetBody');
+
+    // ==========================================
+    // Initialize Charts
+    // ==========================================
+    function initCharts() {
+        // Protocol Chart
+        const protocolCtx = document.getElementById('protocolChart').getContext('2d');
+        protocolChart = new Chart(protocolCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['TCP', 'UDP', 'ICMP', 'Other'],
+                datasets: [{
+                    data: [0, 0, 0, 0],
+                    backgroundColor: ['#3b82f6', '#8b5cf6', '#ec4899', '#6b7280'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 15,
+                            font: { size: 12 }
+                        }
+                    }
+                },
+                animation: {
+                    animateScale: true,
+                    animateRotate: true
+                }
+            }
+        });
+
+        // IP Chart
+        const ipCtx = document.getElementById('ipChart').getContext('2d');
+        ipChart = new Chart(ipCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Packet Count',
+                    data: [],
+                    backgroundColor: '#667eea',
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0 }
+                    }
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // Update Statistics
+    // ==========================================
+    function updateStats(stats) {
+        // Update numbers smoothly
+        document.getElementById('totalPackets').textContent = stats.total_packets;
+        document.getElementById('tcpPackets').textContent = stats.protocols.TCP || 0;
+        document.getElementById('udpPackets').textContent = stats.protocols.UDP || 0;
+        document.getElementById('icmpPackets').textContent = stats.protocols.ICMP || 0;
+
+        // Update charts WITHOUT animation to prevent flicker
+        if (protocolChart) {
+            protocolChart.data.datasets[0].data = [
+                stats.protocols.TCP || 0,
+                stats.protocols.UDP || 0,
+                stats.protocols.ICMP || 0,
+                stats.protocols.Other || 0
+            ];
+            protocolChart.update('none');
+        }
+
+        if (ipChart && stats.top_ips && stats.top_ips.length > 0) {
+            ipChart.data.labels = stats.top_ips.map(item => item.ip);
+            ipChart.data.datasets[0].data = stats.top_ips.map(item => item.count);
+            ipChart.update('none');
+        }
+    }
+
+    // ==========================================
+    // Add Packet to Table
+    // ==========================================
+    function addPacketToTable(packet) {
+        const tbody = document.getElementById('packetBody');
+        
+        // Remove "no data" message
+        if (tbody.querySelector('.no-data')) {
+            tbody.innerHTML = '';
+        }
+
+        // Create row
+        const row = tbody.insertRow(0);
+        row.innerHTML = `
+            <td>${packet.timestamp}</td>
+            <td>${packet.src_ip}</td>
+            <td>${packet.src_port}</td>
+            <td>${packet.dst_ip}</td>
+            <td>${packet.dst_port}</td>
+            <td><span class="protocol-${packet.protocol_name.toLowerCase()}">${packet.protocol_name}</span></td>
+            <td>${packet.size} bytes</td>
+        `;
+
+        // Keep only last 50 rows
+        while (tbody.rows.length > 50) {
+            tbody.deleteRow(tbody.rows.length - 1);
+        }
+    }
+
+    // ==========================================
+    // Socket Event Handlers
+    // ==========================================
+    socket.on('connect', () => {
+        console.log('✅ Connected to server');
+    });
+
+    socket.on('stats_update', (stats) => {
+        updateStats(stats);
+    });
+
+    socket.on('new_packet', (packet) => {
+        addPacketToTable(packet);
+    });
+
+    socket.on('capture_status', (data) => {
+        if (data.status === 'started') {
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            status.textContent = '🟢 Capturing';
+            status.classList.add('active');
+        } else {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            status.textContent = '🔴 Stopped';
+            status.classList.remove('active');
+        }
+    });
+
+    socket.on('clear_table', () => {
+        document.getElementById('packetBody').innerHTML = 
+            '<tr><td colspan="7" class="no-data">No packets captured yet</td></tr>';
+    });
+
+    // ==========================================
+    // Button Event Listeners
+    // ==========================================
+    startBtn.addEventListener('click', () => {
+        socket.emit('start_capture');
+    });
+
+    stopBtn.addEventListener('click', () => {
+        socket.emit('stop_capture');
+    });
+
+    clearBtn.addEventListener('click', () => {
+        if (confirm('Clear all captured data?')) {
+            socket.emit('clear_data');
+        }
+    });
+
+    // ==========================================
+    // Initialize on Load
+    // ==========================================
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('🚀 NetAnalyzer Loaded');
+    });
+</script>
+
+</body>
+</html>
